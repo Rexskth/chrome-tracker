@@ -1,0 +1,155 @@
+:root {
+  --bg-top: #f6f4ef;
+  --bg-bottom: #e9eef2;
+  --panel: #ffffff;
+  --text: #1c252c;
+  --muted: #5e6c77;
+  --line: #d7dde2;
+  --accent: #0f766e;
+  --accent-strong: #115e59;
+  --warn: #b42318;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  width: 390px;
+  min-height: 520px;
+  font-family: "Avenir Next", "Segoe UI", sans-serif;
+  color: var(--text);
+  background: linear-gradient(165deg, var(--bg-top), var(--bg-bottom));
+}
+
+.panel {
+  padding: 16px;
+  display: grid;
+  gap: 12px;
+}
+
+.hero {
+  background: linear-gradient(140deg, #12343b, #1f6f78);
+  color: #f8fbfc;
+  border-radius: 14px;
+  padding: 14px;
+}
+
+.eyebrow {
+  margin: 0;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  opacity: 0.85;
+}
+
+.hero h1 {
+  margin: 6px 0 4px;
+  font-size: 22px;
+  line-height: 1.1;
+}
+
+.subtle {
+  margin: 0;
+  font-size: 13px;
+  opacity: 0.9;
+}
+
+.card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 12px;
+}
+
+.card h2 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+button {
+  border: none;
+  border-radius: 10px;
+  padding: 7px 11px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #ffffff;
+  background: var(--accent);
+  cursor: pointer;
+}
+
+button:hover {
+  background: var(--accent-strong);
+}
+
+button:disabled {
+  opacity: 0.7;
+  cursor: wait;
+}
+
+.summary {
+  margin: 0;
+  min-height: 84px;
+  max-height: 180px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: "Avenir Next", "Segoe UI", sans-serif;
+  color: var(--text);
+  line-height: 1.35;
+}
+
+.sites-list {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.sites-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px dashed var(--line);
+}
+
+.sites-list li:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.site {
+  font-size: 13px;
+  color: var(--text);
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.time {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.status {
+  margin: 0;
+  min-height: 16px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.status.error {
+  color: var(--warn);
+}

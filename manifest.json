@@ -1,0 +1,15 @@
+{
+  "manifest_version": 3,
+  "name": "Daily Activity Tracker",
+  "version": "1.0",
+  "description": "Tracks browsing activity and time spent",
+  "permissions": ["tabs", "storage", "idle"],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Daily Activity Tracker"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "host_permissions": ["<all_urls>"]
+}

@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Daily Activity</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main class="panel">
+      <header class="hero">
+        <p class="eyebrow">Today</p>
+        <h1>Browsing Activity</h1>
+        <p id="total-time" class="subtle">Total: 0 minutes</p>
+      </header>
+
+      <section class="card">
+        <div class="card-head">
+          <h2>Daily Summary</h2>
+          <button id="generate-btn" type="button">Generate</button>
+        </div>
+        <pre id="summary" class="summary">No summary yet. Click Generate.</pre>
+      </section>
+
+      <section class="card">
+        <h2>Time Per Site</h2>
+        <ul id="sites-list" class="sites-list"></ul>
+      </section>
+
+      <p id="status" class="status"></p>
+    </main>
+
+    <script src="popup.js"></script>
+  </body>
+</html>
