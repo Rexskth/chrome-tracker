@@ -56,6 +56,18 @@ body {
   opacity: 0.9;
 }
 
+.ghost-btn {
+  margin-top: 10px;
+  width: 100%;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  color: #f8fbfc;
+}
+
+.ghost-btn:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
 .card {
   background: var(--panel);
   border: 1px solid var(--line);

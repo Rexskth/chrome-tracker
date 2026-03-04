@@ -27,6 +27,13 @@ function saveActivity(url, duration) {
 async function trackNewTab(tabId) {
   try {
     const tab = await chrome.tabs.get(tabId);
+    const now = Date.now();
+
+    // Always save previous tracked session first, even if new tab is non-http
+    if (activeTabId && startTime && currentUrl) {
+      const duration = Math.floor((now - startTime) / 1000);
+      saveActivity(currentUrl, duration);
+    }
 
     // 🚫 Ignore invalid URLs
     if (
@@ -35,15 +42,10 @@ async function trackNewTab(tabId) {
       tab.url.includes("chrome://") ||
       tab.url.includes("edge://")
     ) {
+      activeTabId = null;
+      startTime = null;
+      currentUrl = null;
       return;
-    }
-
-    const now = Date.now();
-
-    // ✅ Save previous tab time
-    if (activeTabId && startTime && currentUrl) {
-      const duration = Math.floor((now - startTime) / 1000);
-      saveActivity(currentUrl, duration);
     }
 
     
@@ -139,6 +141,67 @@ function getTodayAggregatedData() {
   });
 }
 
+function getDayKey(date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+function getLast7DaysKeys() {
+  const keys = [];
+  const now = new Date();
+  for (let i = 6; i >= 0; i -= 1) {
+    const d = new Date(now);
+    d.setDate(now.getDate() - i);
+    keys.push(getDayKey(d));
+  }
+  return keys;
+}
+
+function aggregateDashboardData(activities) {
+  const last7Keys = getLast7DaysKeys();
+  const keySet = new Set(last7Keys);
+  const todayKey = last7Keys[last7Keys.length - 1];
+
+  const todayBySite = {};
+  const weeklyByDay = {};
+  const weeklyBySite = {};
+
+  last7Keys.forEach((key) => {
+    weeklyByDay[key] = 0;
+  });
+
+  activities.forEach((item) => {
+    const itemDate = new Date(item.timestamp);
+    if (Number.isNaN(itemDate.getTime())) return;
+    const dayKey = getDayKey(itemDate);
+    if (!keySet.has(dayKey)) return;
+
+    const duration = Number(item.duration) || 0;
+    const site = item.url;
+
+    weeklyByDay[dayKey] += duration;
+    if (!weeklyBySite[site]) weeklyBySite[site] = 0;
+    weeklyBySite[site] += duration;
+
+    if (dayKey === todayKey) {
+      if (!todayBySite[site]) todayBySite[site] = 0;
+      todayBySite[site] += duration;
+    }
+  });
+
+  const weeklyTotal = Object.values(weeklyByDay).reduce((sum, sec) => sum + sec, 0);
+
+  return {
+    todayBySite,
+    weeklyByDay,
+    weeklyBySite,
+    weeklyTotal,
+    days: last7Keys
+  };
+}
+
 // ✅ Call backend for AI summary
 async function generateSummary() {
   const data = await getTodayAggregatedData();
@@ -202,6 +265,20 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
           error: error.message || "Failed to generate summary."
         });
       });
+    return true;
+  }
+
+  if (message?.type === "GET_DASHBOARD_DATA") {
+    chrome.storage.local.get(["activities", "ai_summary"], (result) => {
+      const activities = result.activities || [];
+      const dashboardData = aggregateDashboardData(activities);
+
+      sendResponse({
+        ok: true,
+        summary: result.ai_summary || "",
+        ...dashboardData
+      });
+    });
     return true;
   }
 

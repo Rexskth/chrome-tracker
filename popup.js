@@ -3,6 +3,7 @@ const sitesListEl = document.getElementById("sites-list");
 const totalTimeEl = document.getElementById("total-time");
 const statusEl = document.getElementById("status");
 const generateBtn = document.getElementById("generate-btn");
+const openDashboardBtn = document.getElementById("open-dashboard-btn");
 
 function formatTime(seconds) {
   const total = Number(seconds) || 0;
@@ -90,4 +91,7 @@ async function generateSummary() {
 }
 
 generateBtn.addEventListener("click", generateSummary);
+openDashboardBtn.addEventListener("click", () => {
+  chrome.tabs.create({ url: chrome.runtime.getURL("dashboard.html") });
+});
 loadInitialState();

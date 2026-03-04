@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Productivity Dashboard</title>
+    <link rel="stylesheet" href="dashboard.css" />
+  </head>
+  <body>
+    <main class="layout">
+      <header class="topbar card">
+        <div>
+          <p class="eyebrow">Productivity Dashboard</p>
+          <h1>Weekly Activity Insights</h1>
+        </div>
+        <div class="actions">
+          <button id="refresh-btn" type="button">Refresh</button>
+          <button id="generate-btn" type="button">Generate Summary</button>
+        </div>
+      </header>
+
+      <section class="kpis">
+        <article class="kpi card">
+          <p class="kpi-label">Today Total</p>
+          <p id="today-total" class="kpi-value">0m</p>
+        </article>
+        <article class="kpi card">
+          <p class="kpi-label">Weekly Total</p>
+          <p id="weekly-total" class="kpi-value">0m</p>
+        </article>
+        <article class="kpi card">
+          <p class="kpi-label">Top Site (Week)</p>
+          <p id="top-site" class="kpi-value">-</p>
+        </article>
+      </section>
+
+      <section class="grid">
+        <article class="card chart-card">
+          <h2>Today: Time Per Site</h2>
+          <ul id="today-sites-bars" class="metric-list"></ul>
+        </article>
+        <article class="card chart-card">
+          <h2>Last 7 Days Trend</h2>
+          <div id="weekly-trend-bars" class="week-bars"></div>
+        </article>
+        <article class="card chart-card">
+          <h2>Focus vs Distraction</h2>
+          <div class="split-track">
+            <div id="focus-productive" class="split productive"></div>
+            <div id="focus-distractive" class="split distractive"></div>
+          </div>
+          <div class="split-meta">
+            <span id="focus-productive-label">Productive: 0%</span>
+            <span id="focus-distractive-label">Distractive: 0%</span>
+          </div>
+        </article>
+        <article class="card list-card">
+          <h2>Weekly Breakdown</h2>
+          <ul id="weekly-site-list" class="site-list"></ul>
+        </article>
+      </section>
+
+      <section class="card summary-card">
+        <h2>Daily Summary</h2>
+        <pre id="summary">No summary yet. Click Generate Summary.</pre>
+      </section>
+
+      <p id="status" class="status"></p>
+    </main>
+
+    <script src="dashboard.js"></script>
+  </body>
+</html>

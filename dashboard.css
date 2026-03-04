@@ -1,0 +1,307 @@
+:root {
+  --bg: #eef2f5;
+  --card: #ffffff;
+  --text: #111827;
+  --muted: #64748b;
+  --line: #d1d9e0;
+  --brand: #0f766e;
+  --brand-strong: #115e59;
+  --accent: #1d4ed8;
+  --danger: #b42318;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: radial-gradient(circle at 0% 0%, #dae8ef, #eef2f5 52%);
+  color: var(--text);
+  font-family: "Avenir Next", "Segoe UI", sans-serif;
+}
+
+.layout {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 20px;
+  display: grid;
+  gap: 14px;
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 14px;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.eyebrow {
+  margin: 0;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+h1 {
+  margin: 6px 0 0;
+  font-size: 28px;
+}
+
+h2 {
+  margin: 0 0 10px;
+  font-size: 15px;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+}
+
+button {
+  border: none;
+  border-radius: 10px;
+  padding: 9px 13px;
+  color: #fff;
+  background: var(--brand);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+button:hover {
+  background: var(--brand-strong);
+}
+
+button:disabled {
+  opacity: 0.7;
+  cursor: wait;
+}
+
+.kpis {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.kpi-label {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.kpi-value {
+  margin: 6px 0 0;
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.chart-card {
+  min-height: 290px;
+}
+
+.list-card {
+  min-height: 290px;
+}
+
+.metric-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.metric-row {
+  display: grid;
+  gap: 6px;
+}
+
+.metric-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13px;
+}
+
+.metric-site {
+  max-width: 75%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.metric-time {
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.bar-track {
+  width: 100%;
+  height: 9px;
+  border-radius: 999px;
+  background: #e8edf1;
+  overflow: hidden;
+}
+
+.bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #0f766e, #0ea5e9);
+}
+
+.week-bars {
+  height: 235px;
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  align-items: end;
+  gap: 8px;
+}
+
+.week-col {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+}
+
+.week-value {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.week-bar-wrap {
+  width: 100%;
+  height: 170px;
+  display: flex;
+  align-items: end;
+  justify-content: center;
+}
+
+.week-bar {
+  width: 70%;
+  min-height: 4px;
+  border-radius: 10px 10px 4px 4px;
+  background: linear-gradient(180deg, #1d4ed8, #60a5fa);
+}
+
+.week-day {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.split-track {
+  width: 100%;
+  height: 16px;
+  border-radius: 999px;
+  background: #e8edf1;
+  overflow: hidden;
+  display: flex;
+}
+
+.split {
+  height: 100%;
+}
+
+.split.productive {
+  background: #0f9d58;
+}
+
+.split.distractive {
+  background: #ef4444;
+}
+
+.split-meta {
+  margin-top: 10px;
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.site-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.site-list li {
+  display: grid;
+  gap: 6px;
+  border-bottom: 1px dashed var(--line);
+  padding-bottom: 8px;
+}
+
+.site-list li:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.site-name {
+  font-size: 13px;
+  max-width: 78%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.site-time {
+  font-size: 13px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.site-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.summary-card pre {
+  margin: 0;
+  min-height: 80px;
+  white-space: pre-wrap;
+  font-family: "Avenir Next", "Segoe UI", sans-serif;
+}
+
+.status {
+  margin: 0;
+  min-height: 20px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.status.error {
+  color: var(--danger);
+}
+
+@media (max-width: 900px) {
+  .topbar {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .kpis {
+    grid-template-columns: 1fr;
+  }
+
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}
