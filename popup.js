@@ -5,14 +5,97 @@ const statusEl = document.getElementById("status");
 const generateBtn = document.getElementById("generate-btn");
 const openDashboardBtn = document.getElementById("open-dashboard-btn");
 
-function formatTime(seconds) {
-  const total = Number(seconds) || 0;
-  const mins = Math.floor(total / 60);
-  const secs = total % 60;
+function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
 
-  if (mins > 0 && secs > 0) return `${mins}m ${secs}s`;
-  if (mins > 0) return `${mins}m`;
-  return `${secs}s`;
+function renderSummary(text) {
+  const normalizedLines = [];
+  String(text || "No summary yet. Click Generate.")
+    .split("\n")
+    .forEach((raw) => {
+      const line = raw.trim();
+      if (!line) {
+        normalizedLines.push("");
+        return;
+      }
+
+      // Handle: **Category** - site: x - site: y
+      const headingInline = line.match(/^\*\*(.+?)\*\*(.*)$/);
+      if (headingInline) {
+        normalizedLines.push(`**${headingInline[1]}**`);
+        const tail = headingInline[2].trim();
+        if (tail) {
+          tail
+            .replace(/^\-\s*/, "")
+            .split(/\s+-\s+/)
+            .map((part) => part.trim())
+            .filter(Boolean)
+            .forEach((item) => normalizedLines.push(`- ${item}`));
+        }
+        return;
+      }
+
+      normalizedLines.push(line);
+    });
+
+  const lines = normalizedLines;
+  const parts = [];
+  let listOpen = false;
+
+  const closeList = () => {
+    if (listOpen) {
+      parts.push("</ul>");
+      listOpen = false;
+    }
+  };
+
+  lines.forEach((raw) => {
+    const line = raw.trim();
+    if (!line) {
+      closeList();
+      return;
+    }
+
+    const heading = line.match(/^\*\*(.+)\*\*$/);
+    if (heading) {
+      closeList();
+      parts.push(`<div class="summary-heading">${escapeHtml(heading[1])}</div>`);
+      return;
+    }
+
+    if (line.startsWith("- ")) {
+      if (!listOpen) {
+        parts.push('<ul class="summary-list">');
+        listOpen = true;
+      }
+      parts.push(`<li>${escapeHtml(line.slice(2))}</li>`);
+      return;
+    }
+
+    closeList();
+    if (line.toLowerCase().startsWith("insight:")) {
+      parts.push(`<p class="summary-insight">${escapeHtml(line)}</p>`);
+      return;
+    }
+    parts.push(`<p class="summary-line">${escapeHtml(line)}</p>`);
+  });
+
+  closeList();
+  summaryEl.innerHTML = parts.join("");
+}
+
+function formatTime(seconds) {
+  const total = Math.max(0, Number(seconds) || 0);
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
 
 function renderSites(data) {
@@ -62,7 +145,7 @@ async function loadInitialState() {
     }
 
     renderSites(response.data || {});
-    summaryEl.textContent = response.summary || "No summary yet. Click Generate.";
+    renderSummary(response.summary);
     setStatus("");
   } catch (error) {
     setStatus(error.message, true);
@@ -81,7 +164,7 @@ async function generateSummary() {
     }
 
     renderSites(response.data || {});
-    summaryEl.textContent = response.summary || "No summary generated.";
+    renderSummary(response.summary || "No summary generated.");
     setStatus("Summary updated.");
   } catch (error) {
     setStatus(error.message, true);
