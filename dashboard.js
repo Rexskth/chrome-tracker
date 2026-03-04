@@ -24,14 +24,96 @@ const PRODUCTIVE_HINTS = [
 ];
 
 function formatTime(seconds) {
-  const total = Number(seconds) || 0;
+  const total = Math.max(0, Number(seconds) || 0);
   const h = Math.floor(total / 3600);
   const m = Math.floor((total % 3600) / 60);
   const s = total % 60;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}
 
-  if (h > 0) return `${h}h ${m}m`;
-  if (m > 0) return `${m}m ${s}s`;
-  return `${s}s`;
+function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function renderSummary(text) {
+  const normalizedLines = [];
+  String(text || "No summary yet. Click Generate Summary.")
+    .split("\n")
+    .forEach((raw) => {
+      const line = raw.trim();
+      if (!line) {
+        normalizedLines.push("");
+        return;
+      }
+
+      // Handle: **Category** - site: x - site: y
+      const headingInline = line.match(/^\*\*(.+?)\*\*(.*)$/);
+      if (headingInline) {
+        normalizedLines.push(`**${headingInline[1]}**`);
+        const tail = headingInline[2].trim();
+        if (tail) {
+          tail
+            .replace(/^\-\s*/, "")
+            .split(/\s+-\s+/)
+            .map((part) => part.trim())
+            .filter(Boolean)
+            .forEach((item) => normalizedLines.push(`- ${item}`));
+        }
+        return;
+      }
+
+      normalizedLines.push(line);
+    });
+
+  const lines = normalizedLines;
+  const parts = [];
+  let listOpen = false;
+
+  const closeList = () => {
+    if (listOpen) {
+      parts.push("</ul>");
+      listOpen = false;
+    }
+  };
+
+  lines.forEach((raw) => {
+    const line = raw.trim();
+    if (!line) {
+      closeList();
+      return;
+    }
+
+    const heading = line.match(/^\*\*(.+)\*\*$/);
+    if (heading) {
+      closeList();
+      parts.push(`<div class="summary-heading">${escapeHtml(heading[1])}</div>`);
+      return;
+    }
+
+    if (line.startsWith("- ")) {
+      if (!listOpen) {
+        parts.push('<ul class="summary-list">');
+        listOpen = true;
+      }
+      parts.push(`<li>${escapeHtml(line.slice(2))}</li>`);
+      return;
+    }
+
+    closeList();
+    if (line.toLowerCase().startsWith("insight:")) {
+      parts.push(`<p class="summary-insight">${escapeHtml(line)}</p>`);
+      return;
+    }
+    parts.push(`<p class="summary-line">${escapeHtml(line)}</p>`);
+  });
+
+  closeList();
+  summaryEl.innerHTML = parts.join("");
 }
 
 function setStatus(message, isError = false) {
@@ -247,7 +329,7 @@ function renderAll(data) {
   renderTodayBars(data);
   renderWeeklyTrend(data);
   renderFocusSplit(data);
-  summaryEl.textContent = data.summary || "No summary yet. Click Generate Summary.";
+  renderSummary(data.summary);
 }
 
 async function loadDashboard() {
