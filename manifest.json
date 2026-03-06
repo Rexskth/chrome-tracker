@@ -3,7 +3,7 @@
   "name": "Daily Activity Tracker",
   "version": "1.0",
   "description": "Tracks browsing activity and time spent",
-  "permissions": ["tabs", "storage", "idle"],
+  "permissions": ["tabs", "storage", "idle", "alarms"],
   "action": {
     "default_popup": "popup.html",
     "default_title": "Daily Activity Tracker"

@@ -3,6 +3,7 @@ let startTime = null;
 let currentUrl = null;
 
 const ignoredSites = ["newtab", "extensions"];
+const BACKEND_BASE_URL = "http://localhost:5001";
 
 // ✅ Save activity
 function saveActivity(url, duration) {
@@ -18,6 +19,9 @@ function saveActivity(url, duration) {
     });
 
     chrome.storage.local.set({ activities });
+    syncTodayDataToBackend().catch((error) => {
+      console.error("Activity sync failed:", error);
+    });
   });
 
   console.log("Saved:", url, duration);
@@ -148,6 +152,13 @@ function getDayKey(date) {
   return `${y}-${m}-${d}`;
 }
 
+function getLocalDayKey(date = new Date()) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
 function getLast7DaysKeys() {
   const keys = [];
   const now = new Date();
@@ -202,8 +213,42 @@ function aggregateDashboardData(activities) {
   };
 }
 
+async function syncTodayDataToBackend() {
+  const data = await getTodayAggregatedData();
+  const date = getLocalDayKey(new Date());
+
+  const response = await fetch(`${BACKEND_BASE_URL}/activity/sync`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ date, data })
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Sync API failed: ${response.status} ${errorText}`);
+  }
+}
+
+function flushActiveSession() {
+  if (!startTime || !currentUrl) return;
+
+  const now = Date.now();
+  const duration = Math.floor((now - startTime) / 1000);
+  if (duration > 0) {
+    saveActivity(currentUrl, duration);
+    startTime = now;
+  }
+}
+
 // ✅ Call backend for AI summary
 async function generateSummary() {
+  flushActiveSession();
+  await syncTodayDataToBackend().catch((error) => {
+    console.error("Sync before summary failed:", error);
+  });
+
   const data = await getTodayAggregatedData();
 
   if (Object.keys(data).length === 0) {
@@ -232,6 +277,15 @@ async function generateSummary() {
 
 // Optional: expose function manually
 globalThis.generateSummary = generateSummary;
+
+chrome.alarms.create("activity-sync", { periodInMinutes: 1 });
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name !== "activity-sync") return;
+  flushActiveSession();
+  syncTodayDataToBackend().catch((error) => {
+    console.error("Periodic sync failed:", error);
+  });
+});
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type === "GET_DAILY_DATA") {
