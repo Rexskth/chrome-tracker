@@ -10,6 +10,7 @@ const app = express();
 const PORT = 5001;
 const REPORT_TIMEZONE = process.env.REPORT_TIMEZONE || "Asia/Kolkata";
 const REPORT_CRON = process.env.REPORT_CRON || "59 23 * * *";
+const SCHEDULER_TICK_CRON = "* * * * *";
 const STORE_PATH = path.join(__dirname, "data", "daily-store.json");
 
 // Middleware
@@ -84,6 +85,40 @@ function formatDateInTimezone(timeZone, date = new Date()) {
   const month = parts.find((p) => p.type === "month")?.value;
   const day = parts.find((p) => p.type === "day")?.value;
   return `${year}-${month}-${day}`;
+}
+
+function parseDailyTimeFromCron(cronExpr) {
+  const parts = String(cronExpr || "").trim().split(/\s+/);
+  if (parts.length < 2) return { hour: 23, minute: 59 };
+
+  const minute = Number(parts[0]);
+  const hour = Number(parts[1]);
+  if (!Number.isInteger(minute) || !Number.isInteger(hour)) {
+    return { hour: 23, minute: 59 };
+  }
+  if (minute < 0 || minute > 59 || hour < 0 || hour > 23) {
+    return { hour: 23, minute: 59 };
+  }
+
+  return { hour, minute };
+}
+
+function getClockInTimezone(timeZone, date = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone,
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false
+  }).formatToParts(date);
+
+  return {
+    hour: Number(parts.find((p) => p.type === "hour")?.value || 0),
+    minute: Number(parts.find((p) => p.type === "minute")?.value || 0)
+  };
+}
+
+function shiftDays(date, days) {
+  return new Date(date.getTime() + days * 24 * 60 * 60 * 1000);
 }
 
 function sanitizeDataObject(data) {
@@ -260,26 +295,38 @@ async function generateSummaryText(data, { strict = true } = {}) {
 }
 
 async function sendDailyTelegramReport() {
+  const dateKey = formatDateInTimezone(REPORT_TIMEZONE);
+  return sendDailyTelegramReportForDate(dateKey, { allowEmpty: true, skipIfAlreadySent: true });
+}
+
+async function sendDailyTelegramReportForDate(
+  dateKey,
+  { allowEmpty = false, skipIfAlreadySent = true } = {}
+) {
   const token = process.env.TELEGRAM_BOT_TOKEN;
   const chatId = process.env.TELEGRAM_CHAT_ID;
   if (!token || !chatId) {
     console.log("Telegram config missing. Skipping scheduled report.");
-    return;
+    return { ok: false, reason: "missing_telegram_config" };
   }
 
-  const dateKey = formatDateInTimezone(REPORT_TIMEZONE);
   const store = await loadStore();
-  if (store.lastTelegramReportDate === dateKey) {
+  if (skipIfAlreadySent && store.lastTelegramReportDate === dateKey) {
     console.log(`Telegram report already sent for ${dateKey}.`);
-    return;
+    return { ok: false, reason: "already_sent" };
   }
 
-  const todayData = sanitizeDataObject(store.daily[dateKey] || {});
+  const dayData = sanitizeDataObject(store.daily[dateKey] || {});
+  if (!allowEmpty && Object.keys(dayData).length === 0) {
+    console.log(`No activity data found for ${dateKey}. Scheduled send skipped.`);
+    return { ok: false, reason: "no_data" };
+  }
+
   let summaryText = "";
-  if (Object.keys(todayData).length === 0) {
+  if (Object.keys(dayData).length === 0) {
     summaryText = "No browsing activity tracked today.";
   } else {
-    summaryText = await generateSummaryText(todayData, { strict: false });
+    summaryText = await generateSummaryText(dayData, { strict: false });
   }
 
   const telegramText = `<b>Daily Summary (${dateKey})</b>\n\n${toTelegramHtml(summaryText)}`.slice(0, 4000);
@@ -303,6 +350,31 @@ async function sendDailyTelegramReport() {
   store.lastTelegramReportDate = dateKey;
   await saveStore(store);
   console.log(`Telegram daily report sent for ${dateKey}`);
+  return { ok: true, reason: "sent", dateKey };
+}
+
+async function runScheduledTelegramCheck(source = "cron") {
+  const sendTime = parseDailyTimeFromCron(REPORT_CRON);
+  const now = new Date();
+  const nowClock = getClockInTimezone(REPORT_TIMEZONE, now);
+  const targetReached =
+    nowClock.hour > sendTime.hour ||
+    (nowClock.hour === sendTime.hour && nowClock.minute >= sendTime.minute);
+
+  const todayKey = formatDateInTimezone(REPORT_TIMEZONE, now);
+  const yesterdayKey = formatDateInTimezone(REPORT_TIMEZONE, shiftDays(now, -1));
+  const candidateDates = targetReached ? [todayKey, yesterdayKey] : [yesterdayKey];
+
+  for (const dateKey of candidateDates) {
+    const result = await sendDailyTelegramReportForDate(dateKey, {
+      allowEmpty: false,
+      skipIfAlreadySent: true
+    });
+    if (result.ok) {
+      console.log(`[${source}] Telegram scheduled report delivered for ${dateKey}`);
+      return;
+    }
+  }
 }
 
 app.post("/activity/sync", async (req, res) => {
@@ -321,6 +393,7 @@ app.post("/activity/sync", async (req, res) => {
     const store = await loadStore();
     store.daily[date] = cleanData;
     await saveStore(store);
+    console.log(`Activity synced for ${date}. Sites: ${Object.keys(cleanData).length}`);
 
     return res.status(200).json({ ok: true, date, sites: Object.keys(cleanData).length });
   } catch (error) {
@@ -369,16 +442,21 @@ app.use((req, res) => {
 app.listen(PORT, () => {
   console.log(`🚀 Server running at http://localhost:${PORT}`);
   console.log(`⏰ Telegram report schedule: '${REPORT_CRON}' (${REPORT_TIMEZONE})`);
+  console.log(`⏱️ Scheduler tick: '${SCHEDULER_TICK_CRON}' (${REPORT_TIMEZONE})`);
 });
 
 cron.schedule(
-  REPORT_CRON,
+  SCHEDULER_TICK_CRON,
   async () => {
     try {
-      await sendDailyTelegramReport();
+      await runScheduledTelegramCheck("cron");
     } catch (error) {
       console.error("Scheduled report failed:", error);
     }
   },
   { timezone: REPORT_TIMEZONE }
 );
+
+runScheduledTelegramCheck("startup").catch((error) => {
+  console.error("Startup scheduled check failed:", error);
+});
