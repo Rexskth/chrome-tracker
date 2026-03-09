@@ -301,7 +301,7 @@ async function sendDailyTelegramReport() {
 
 async function sendDailyTelegramReportForDate(
   dateKey,
-  { allowEmpty = false, skipIfAlreadySent = true } = {}
+  { allowEmpty = false, skipIfAlreadySent = true, markAsSent = true } = {}
 ) {
   const token = process.env.TELEGRAM_BOT_TOKEN;
   const chatId = process.env.TELEGRAM_CHAT_ID;
@@ -347,8 +347,10 @@ async function sendDailyTelegramReportForDate(
     throw new Error(`Telegram send failed: ${telegramResponse.status} ${errorText}`);
   }
 
-  store.lastTelegramReportDate = dateKey;
-  await saveStore(store);
+  if (markAsSent) {
+    store.lastTelegramReportDate = dateKey;
+    await saveStore(store);
+  }
   console.log(`Telegram daily report sent for ${dateKey}`);
   return { ok: true, reason: "sent", dateKey };
 }
@@ -404,8 +406,13 @@ app.post("/activity/sync", async (req, res) => {
 
 app.post("/report/send-now", async (_req, res) => {
   try {
-    await sendDailyTelegramReport();
-    return res.status(200).json({ ok: true });
+    const dateKey = formatDateInTimezone(REPORT_TIMEZONE);
+    const result = await sendDailyTelegramReportForDate(dateKey, {
+      allowEmpty: true,
+      skipIfAlreadySent: false,
+      markAsSent: false
+    });
+    return res.status(200).json({ ok: true, result });
   } catch (error) {
     console.error("Manual report send failed:", error);
     return res.status(500).json({ error: error.message || "Failed to send report." });
