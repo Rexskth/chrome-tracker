@@ -3,7 +3,8 @@ let startTime = null;
 let currentUrl = null;
 
 const ignoredSites = ["newtab", "extensions"];
-const BACKEND_BASE_URL = "http://localhost:5001";
+const BACKEND_BASE_URLS = ["http://localhost:5001", "http://127.0.0.1:5001"];
+const LAST_SYNC_META_KEY = "last_backend_sync_meta";
 
 // ✅ Save activity
 function saveActivity(url, duration) {
@@ -65,6 +66,14 @@ async function trackNewTab(tabId) {
   } catch (error) {
     console.log("Skipping invalid tab:", error.message);
   }
+}
+
+function initTrackingFromCurrentTab() {
+  chrome.tabs.query({ active: true, lastFocusedWindow: true }, (tabs) => {
+    const tab = tabs && tabs[0];
+    if (!tab || typeof tab.id !== "number") return;
+    trackNewTab(tab.id);
+  });
 }
 
 // ✅ Tab switch
@@ -217,7 +226,7 @@ async function syncTodayDataToBackend() {
   const data = await getTodayAggregatedData();
   const date = getLocalDayKey(new Date());
 
-  const response = await fetch(`${BACKEND_BASE_URL}/activity/sync`, {
+  const response = await fetchBackend("/activity/sync", {
     method: "POST",
     headers: {
       "Content-Type": "application/json"
@@ -229,6 +238,18 @@ async function syncTodayDataToBackend() {
     const errorText = await response.text();
     throw new Error(`Sync API failed: ${response.status} ${errorText}`);
   }
+
+  const payload = await response.json().catch(() => ({ ok: true }));
+  chrome.storage.local.set({
+    [LAST_SYNC_META_KEY]: {
+      ok: true,
+      date,
+      sites: Object.keys(data).length,
+      at: new Date().toISOString(),
+      response: payload
+    }
+  });
+  return payload;
 }
 
 function flushActiveSession() {
@@ -257,7 +278,7 @@ async function generateSummary() {
     return emptyMessage;
   }
 
-  const response = await fetch("http://localhost:5001/summarize", {
+  const response = await fetchBackend("/summarize", {
     method: "POST",
     headers: {
       "Content-Type": "application/json"
@@ -275,10 +296,50 @@ async function generateSummary() {
   return result;
 }
 
+async function sendToTelegram() {
+  flushActiveSession();
+  await syncTodayDataToBackend();
+
+  const response = await fetchBackend("/report/send-now", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    }
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Telegram send failed: ${response.status} ${errorText}`);
+  }
+
+  const result = await response.json().catch(() => ({ ok: true }));
+  if (!result?.ok) {
+    throw new Error(result?.error || "Failed to send summary to Telegram.");
+  }
+  return result;
+}
+
 // Optional: expose function manually
 globalThis.generateSummary = generateSummary;
 
-chrome.alarms.create("activity-sync", { periodInMinutes: 1 });
+function ensureSyncAlarm() {
+  chrome.alarms.create("activity-sync", { periodInMinutes: 1 });
+}
+
+async function fetchBackend(path, init) {
+  let lastError = null;
+  for (const baseUrl of BACKEND_BASE_URLS) {
+    try {
+      return await fetch(`${baseUrl}${path}`, init);
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError || new Error("Backend fetch failed");
+}
+
+ensureSyncAlarm();
+initTrackingFromCurrentTab();
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name !== "activity-sync") return;
   flushActiveSession();
@@ -287,17 +348,51 @@ chrome.alarms.onAlarm.addListener((alarm) => {
   });
 });
 
+chrome.runtime.onStartup.addListener(() => {
+  ensureSyncAlarm();
+  initTrackingFromCurrentTab();
+  syncTodayDataToBackend().catch((error) => {
+    console.error("Startup sync failed:", error);
+  });
+});
+
+chrome.runtime.onInstalled.addListener(() => {
+  ensureSyncAlarm();
+  initTrackingFromCurrentTab();
+  syncTodayDataToBackend().catch((error) => {
+    console.error("Install sync failed:", error);
+  });
+});
+
+syncTodayDataToBackend().catch((error) => {
+  console.error("Initial sync failed:", error);
+});
+
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type === "GET_DAILY_DATA") {
-    getTodayAggregatedData().then((data) => {
-      chrome.storage.local.get(["ai_summary"], (result) => {
-        sendResponse({
-          ok: true,
-          data,
-          summary: result.ai_summary || ""
+    flushActiveSession();
+    syncTodayDataToBackend()
+      .catch((error) => {
+        console.error("Sync on GET_DAILY_DATA failed:", error);
+        chrome.storage.local.set({
+          [LAST_SYNC_META_KEY]: {
+            ok: false,
+            at: new Date().toISOString(),
+            error: error.message || "Unknown sync error"
+          }
+        });
+      })
+      .finally(() => {
+        getTodayAggregatedData().then((data) => {
+          chrome.storage.local.get(["ai_summary"], (result) => {
+            sendResponse({
+              ok: true,
+              data,
+              summary: result.ai_summary || ""
+            });
+          });
         });
       });
-    });
     return true;
   }
 
@@ -322,17 +417,50 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return true;
   }
 
-  if (message?.type === "GET_DASHBOARD_DATA") {
-    chrome.storage.local.get(["activities", "ai_summary"], (result) => {
-      const activities = result.activities || [];
-      const dashboardData = aggregateDashboardData(activities);
-
-      sendResponse({
-        ok: true,
-        summary: result.ai_summary || "",
-        ...dashboardData
+  if (message?.type === "SEND_TO_TELEGRAM") {
+    sendToTelegram()
+      .then((result) => {
+        sendResponse({
+          ok: true,
+          result
+        });
+      })
+      .catch((error) => {
+        console.error("Error sending to Telegram:", error);
+        sendResponse({
+          ok: false,
+          error: error.message || "Failed to send to Telegram."
+        });
       });
-    });
+    return true;
+  }
+
+  if (message?.type === "GET_DASHBOARD_DATA") {
+    flushActiveSession();
+    syncTodayDataToBackend()
+      .catch((error) => {
+        console.error("Sync on GET_DASHBOARD_DATA failed:", error);
+        chrome.storage.local.set({
+          [LAST_SYNC_META_KEY]: {
+            ok: false,
+            at: new Date().toISOString(),
+            error: error.message || "Unknown sync error"
+          }
+        });
+      })
+      .finally(() => {
+        chrome.storage.local.get(["activities", "ai_summary", LAST_SYNC_META_KEY], (result) => {
+          const activities = result.activities || [];
+          const dashboardData = aggregateDashboardData(activities);
+
+          sendResponse({
+            ok: true,
+            summary: result.ai_summary || "",
+            backendSync: result[LAST_SYNC_META_KEY] || null,
+            ...dashboardData
+          });
+        });
+      });
     return true;
   }
 

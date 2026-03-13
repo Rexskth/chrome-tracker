@@ -8,7 +8,7 @@ Chrome extension + backend service for tracking browsing time and generating con
 - Popup with daily totals and per-site time
 - Dashboard with weekly insights and visuals
 - Summary generation via Groq Cloud LLM
-- Automatic Telegram daily report at `11:59 PM` (local cron on backend)
+- Manual Telegram send from extension UI (`Send to Telegram` button)
 
 ## Project Structure
 
@@ -16,6 +16,7 @@ Chrome extension + backend service for tracking browsing time and generating con
 chrome-tracker/
 ├── backend/
 │   ├── .env
+│   ├── .env.example
 │   ├── package.json
 │   └── server.js
 ├── background.js
@@ -26,7 +27,7 @@ chrome-tracker/
 ├── dashboard.html
 ├── dashboard.css
 ├── dashboard.js
-└── libs/
+└── README.md
 ```
 
 ## Prerequisites
@@ -34,6 +35,7 @@ chrome-tracker/
 - Node.js 18+
 - Google Chrome (or Chromium-based browser)
 - Groq API key
+- Telegram bot token + chat id
 
 ## Backend Setup
 
@@ -44,11 +46,7 @@ cd backend
 npm install
 ```
 
-Set API key in:
-
-- `backend/.env`
-
-Required values:
+Configure `backend/.env`:
 
 ```env
 GROQ_API_KEY=your_groq_api_key_here
@@ -58,7 +56,6 @@ TELEGRAM_BOT_TOKEN=your_telegram_bot_token
 TELEGRAM_CHAT_ID=your_telegram_chat_id
 
 REPORT_TIMEZONE=Asia/Kolkata
-REPORT_CRON=59 23 * * *
 ```
 
 Run server:
@@ -77,31 +74,29 @@ Health check:
 curl -i http://localhost:5001/
 ```
 
-## Extension Setup (Load in Browser)
+## Extension Setup
 
 1. Open `chrome://extensions`
 2. Enable **Developer mode**
 3. Click **Load unpacked**
 4. Select folder: `/Users/mac/Documents/Me/chrome-tracker`
-5. Pin extension (optional)
-
-After code changes, click **Reload** on extension card.
+5. Click **Reload** after any code change
 
 ## How to Use
 
 ### Popup
 
-1. Browse a few sites (http/https)
+1. Browse a few sites (`http`/`https`)
 2. Open extension popup
-3. Click **Generate** to call backend summary API
-4. Click **Open Dashboard** for full analytics
+3. Click **Generate** to create summary
+4. Click **Send to Telegram** to send current-day summary instantly
 
 ### Dashboard
 
 - Shows today totals, weekly totals, top site
 - Shows per-site and weekly trend visuals
 - Shows focus vs distraction split
-- Refresh data with **Refresh** button
+- Use **Generate Summary** and **Send to Telegram** buttons as needed
 
 ## API Contract
 
@@ -130,7 +125,7 @@ Request:
 
 ```json
 {
-  "date": "2026-03-06",
+  "date": "2026-03-13",
   "data": {
     "chatgpt.com": 1200,
     "youtube.com": 1800
@@ -140,36 +135,49 @@ Request:
 
 ### `POST /report/send-now`
 
-Manual trigger to send Telegram report immediately (for testing).
+Sends Telegram summary immediately.
+
+Optional request body (backend will store this payload before sending):
+
+```json
+{
+  "date": "2026-03-13",
+  "data": {
+    "chatgpt.com": 1200,
+    "github.com": 600
+  }
+}
+```
+
+### `GET /report/status`
+
+Returns backend status for current day:
+
+- `todayDate`
+- `todaySites`
+- `hasTodayData`
+- `lastTelegramReportDate`
+- `deliveryMode` (`manual_button_only`)
 
 ## Troubleshooting
 
-### Summary generation fails
+### `Failed to fetch` on Generate/Send
 
-- Confirm backend is running on `http://localhost:5001`
-- Confirm `GROQ_API_KEY` is valid in `backend/.env`
+- Ensure backend is running on `http://localhost:5001`
+- Reload extension in `chrome://extensions`
 - Restart backend after `.env` changes
 
-### Telegram report not sent at 11:59 PM
+### Telegram message says no activity but dashboard has data
 
-- Ensure backend process was running at that time
-- Ensure machine was awake (not sleep/shutdown)
-- Verify `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` in `backend/.env`
-- Test manually:
+- Dashboard reads local extension storage; Telegram reads backend store.
+- Click **Generate** or **Send to Telegram** once to force sync first.
+- Verify backend data:
 
 ```bash
-curl -X POST http://localhost:5001/report/send-now
+curl http://localhost:5001/report/status
 ```
 
-### Dashboard/popup shows empty
-
-- Reload extension in `chrome://extensions`
-- Browse regular websites for at least 20-30 seconds
-- Check stored activity in extension devtools:
-
-```js
-chrome.storage.local.get(["activities"], (r) => console.log(r.activities));
-```
+Expect `hasTodayData: true` and `todaySites > 0`.
 
 ### Port already in use
 
@@ -177,8 +185,6 @@ chrome.storage.local.get(["activities"], (r) => console.log(r.activities));
 lsof -nP -iTCP:5001 -sTCP:LISTEN
 ```
 
-Stop that process, then restart server.
-
-
+Kill that process, then restart server.
 
 ### Made with ❤️ By Brajendra

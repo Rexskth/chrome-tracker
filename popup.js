@@ -3,6 +3,7 @@ const sitesListEl = document.getElementById("sites-list");
 const totalTimeEl = document.getElementById("total-time");
 const statusEl = document.getElementById("status");
 const generateBtn = document.getElementById("generate-btn");
+const sendTelegramBtn = document.getElementById("send-telegram-btn");
 const openDashboardBtn = document.getElementById("open-dashboard-btn");
 
 function escapeHtml(value) {
@@ -135,6 +136,69 @@ function sendMessage(type) {
   });
 }
 
+function isToday(isoString) {
+  const date = new Date(isoString);
+  const now = new Date();
+  return (
+    date.getFullYear() === now.getFullYear() &&
+    date.getMonth() === now.getMonth() &&
+    date.getDate() === now.getDate()
+  );
+}
+
+function getLocalDayKey(date = new Date()) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+function getTodayAggregatedDataFromStorage() {
+  return new Promise((resolve) => {
+    chrome.storage.local.get(["activities"], (result) => {
+      const activities = Array.isArray(result.activities) ? result.activities : [];
+      const summary = {};
+
+      activities.forEach((item) => {
+        if (!isToday(item.timestamp)) return;
+        if (!item.url) return;
+        const duration = Number(item.duration) || 0;
+        if (duration <= 0) return;
+        summary[item.url] = (summary[item.url] || 0) + duration;
+      });
+
+      resolve(summary);
+    });
+  });
+}
+
+async function postSendNowDirect() {
+  const bases = ["http://localhost:5001", "http://127.0.0.1:5001"];
+  let lastError = null;
+  const data = await getTodayAggregatedDataFromStorage();
+  const date = getLocalDayKey(new Date());
+  const payload = JSON.stringify({ date, data });
+
+  for (const base of bases) {
+    try {
+      const response = await fetch(`${base}/report/send-now`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: payload
+      });
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(`Telegram send failed: ${response.status} ${text}`);
+      }
+      return await response.json().catch(() => ({ ok: true }));
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw lastError || new Error("Failed to reach backend.");
+}
+
 async function loadInitialState() {
   try {
     setStatus("Loading data...");
@@ -173,7 +237,36 @@ async function generateSummary() {
   }
 }
 
+async function sendToTelegram() {
+  generateBtn.disabled = true;
+  sendTelegramBtn.disabled = true;
+  setStatus("Sending summary to Telegram...");
+
+  try {
+    let response;
+    try {
+      response = await sendMessage("SEND_TO_TELEGRAM");
+    } catch (error) {
+      const isPortClosed = String(error.message || "").includes("message port closed");
+      if (!isPortClosed) throw error;
+      response = await postSendNowDirect();
+    }
+
+    if (!response?.ok) {
+      throw new Error(response?.error || "Failed to send summary to Telegram.");
+    }
+
+    setStatus("Sent to Telegram.");
+  } catch (error) {
+    setStatus(error.message, true);
+  } finally {
+    generateBtn.disabled = false;
+    sendTelegramBtn.disabled = false;
+  }
+}
+
 generateBtn.addEventListener("click", generateSummary);
+sendTelegramBtn.addEventListener("click", sendToTelegram);
 openDashboardBtn.addEventListener("click", () => {
   chrome.tabs.create({ url: chrome.runtime.getURL("dashboard.html") });
 });
