@@ -121,6 +121,52 @@ async function saveStore(store) {
   await fs.writeFile(STORE_PATH, JSON.stringify(store, null, 2), "utf-8");
 }
 
+function getCategoryIcon(label) {
+  const normalized = String(label || "").toLowerCase();
+  if (normalized.includes("productive")) return "💼";
+  if (normalized.includes("social")) return "📱";
+  if (normalized.includes("entertainment")) return "🎬";
+  if (normalized.includes("communication")) return "💬";
+  if (normalized.includes("shopping")) return "🛍️";
+  if (normalized.includes("other")) return "📌";
+  return "•";
+}
+
+function normalizeSummaryLines(summaryText) {
+  const normalizedLines = [];
+
+  String(summaryText || "")
+    .split("\n")
+    .forEach((raw) => {
+      const line = raw.trim();
+      if (!line) {
+        normalizedLines.push("");
+        return;
+      }
+
+      // Handle compact LLM output like:
+      // **Category** - site: x - site: y
+      const headingInline = line.match(/^\*\*(.+?)\*\*(.*)$/);
+      if (headingInline) {
+        normalizedLines.push(`**${headingInline[1]}**`);
+        const tail = headingInline[2].trim();
+        if (tail) {
+          tail
+            .replace(/^\-\s*/, "")
+            .split(/\s+-\s+/)
+            .map((part) => part.trim())
+            .filter(Boolean)
+            .forEach((item) => normalizedLines.push(`- ${item}`));
+        }
+        return;
+      }
+
+      normalizedLines.push(line);
+    });
+
+  return normalizedLines;
+}
+
 function toTelegramHtml(summaryText) {
   const escapeHtml = (str) =>
     String(str)
@@ -128,17 +174,40 @@ function toTelegramHtml(summaryText) {
       .replace(/</g, "&lt;")
       .replace(/>/g, "&gt;");
 
-  const lines = String(summaryText || "").split("\n");
-  return lines
-    .map((line) => {
-      const trimmed = line.trim();
-      if (!trimmed) return "";
-      const heading = trimmed.match(/^\*\*(.+)\*\*$/);
-      if (heading) return `<b>${escapeHtml(heading[1])}</b>`;
-      if (trimmed.startsWith("- ")) return `• ${escapeHtml(trimmed.slice(2))}`;
-      return escapeHtml(trimmed);
-    })
-    .join("\n");
+  const lines = normalizeSummaryLines(summaryText);
+  const parts = [];
+
+  lines.forEach((line) => {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      if (parts.length && parts[parts.length - 1] !== "") {
+        parts.push("");
+      }
+      return;
+    }
+
+    const heading = trimmed.match(/^\*\*(.+)\*\*$/);
+    if (heading) {
+      const label = heading[1];
+      const icon = getCategoryIcon(label);
+      parts.push(`${icon} <b>${escapeHtml(label)}</b>`);
+      return;
+    }
+
+    if (trimmed.startsWith("- ")) {
+      parts.push(`  ◦ ${escapeHtml(trimmed.slice(2))}`);
+      return;
+    }
+
+    if (trimmed.toLowerCase().startsWith("insight:")) {
+      parts.push(`💡 <b>Insight</b>\n${escapeHtml(trimmed.slice("Insight:".length).trim())}`);
+      return;
+    }
+
+    parts.push(escapeHtml(trimmed));
+  });
+
+  return parts.join("\n").replace(/\n{3,}/g, "\n\n");
 }
 
 function toGroqInputLines(data) {
@@ -286,7 +355,14 @@ async function sendDailyTelegramReportForDate(
     summaryText = await generateSummaryText(dayData, { strict: false });
   }
 
-  const telegramText = `<b>Daily Summary (${dateKey})</b>\n\n${toTelegramHtml(summaryText)}`.slice(0, 4000);
+  const telegramText = [
+    `📊 <b>Daily Summary</b>`,
+    `<i>${dateKey}</i>`,
+    "",
+    toTelegramHtml(summaryText)
+  ]
+    .join("\n")
+    .slice(0, 4000);
   const telegramResponse = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
     method: "POST",
     headers: {
